@@ -157,6 +157,23 @@
     --sidebar-ring: #00c8d4;
 }
 
+/* ---------------------------------------------------------------------------
+   Canvas — React Flow handle visibility
+   Handles are hidden by default and revealed on node hover. Plain CSS (no
+   !important) so React Flow's connection-state classes can still override:
+     .react-flow__handle-connecting  — handle being dragged from
+     .react-flow__handle-valid       — valid drop target while dragging
+--------------------------------------------------------------------------- */
+.react-flow__node .react-flow__handle {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.react-flow__node:hover .react-flow__handle,
+.react-flow__handle.react-flow__handle-connecting,
+.react-flow__handle.react-flow__handle-valid {
+  opacity: 1;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

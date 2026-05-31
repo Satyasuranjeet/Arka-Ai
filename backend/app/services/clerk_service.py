@@ -91,11 +91,13 @@ async def get_user_by_email(email: str) -> Optional[dict]:
     except Exception:
         return None
 
+
+async def get_user_info_by_id(user_id: str) -> Optional[dict]:
     """
-    Look up a Clerk user by email address.
+    Return display name and avatar URL for a Clerk user given their user ID.
 
     Returns a dict with ``display_name`` and ``avatar_url`` keys on success,
-    or ``None`` when no matching user exists or the request fails.
+    or ``None`` on any failure.
     """
     secret_key = os.environ.get("CLERK_SECRET_KEY", "")
     if not secret_key:
@@ -104,25 +106,20 @@ async def get_user_by_email(email: str) -> Optional[dict]:
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(
-                "https://api.clerk.com/v1/users",
-                params={"email_address": email, "limit": 1},
+                f"https://api.clerk.com/v1/users/{user_id}",
                 headers={"Authorization": f"Bearer {secret_key}"},
             )
 
         if resp.status_code != 200:
             return None
 
-        users = resp.json()
-        if not users:
-            return None
-
-        user = users[0]
+        user = resp.json()
         first = user.get("first_name") or ""
         last = user.get("last_name") or ""
         display_name = (
             f"{first} {last}".strip()
             or user.get("username")
-            or email
+            or user_id
         )
         return {
             "display_name": display_name,

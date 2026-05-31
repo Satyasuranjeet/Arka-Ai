@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import init_db
 from api.projects import router as projects_router
+from api.liveblocks_auth import router as liveblocks_router
 
 
 @asynccontextmanager
@@ -31,6 +32,7 @@ app.add_middleware(
 )
 
 app.include_router(projects_router)
+app.include_router(liveblocks_router)
 
 
 # ---------------------------------------------------------------------------
