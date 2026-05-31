@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { X, Plus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -9,6 +10,7 @@ import { cn } from '@/lib/utils'
  *   isOpen: boolean,
  *   onClose: () => void,
  *   projects: Array<{id: string, name: string, slug: string, owned: boolean}>,
+ *   activeProjectId?: string,
  *   onNewProject: () => void,
  *   onRenameProject: (project: object) => void,
  *   onDeleteProject: (project: object) => void,
@@ -18,12 +20,19 @@ export function ProjectSidebar({
   isOpen,
   onClose,
   projects = [],
+  activeProjectId,
   onNewProject,
   onRenameProject,
   onDeleteProject,
 }) {
+  const navigate = useNavigate()
   const myProjects = projects.filter((p) => p.owned)
   const sharedProjects = projects.filter((p) => !p.owned)
+
+  function handleOpenProject(project) {
+    navigate(`/editor/${project.id}`)
+    onClose()
+  }
 
   return (
     <>
@@ -78,7 +87,9 @@ export function ProjectSidebar({
                     <ProjectItem
                       key={project.id}
                       project={project}
+                      isActive={project.id === activeProjectId}
                       showActions
+                      onClick={() => handleOpenProject(project)}
                       onRename={() => onRenameProject(project)}
                       onDelete={() => onDeleteProject(project)}
                     />
@@ -98,7 +109,9 @@ export function ProjectSidebar({
                     <ProjectItem
                       key={project.id}
                       project={project}
+                      isActive={project.id === activeProjectId}
                       showActions={false}
+                      onClick={() => handleOpenProject(project)}
                     />
                   ))}
                 </ul>
@@ -124,17 +137,29 @@ export function ProjectSidebar({
  *
  * @param {{
  *   project: {id: string, name: string},
+ *   isActive?: boolean,
  *   showActions: boolean,
  *   onRename?: () => void,
  *   onDelete?: () => void,
  * }} props
  */
-function ProjectItem({ project, showActions = true, onRename, onDelete }) {
+function ProjectItem({ project, isActive = false, showActions = true, onClick, onRename, onDelete }) {
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
-    <li className="group relative flex items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-elevated">
-      <span className="flex-1 truncate text-copy-primary">{project.name}</span>
+    <li
+      className={cn(
+        'group relative flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-elevated',
+        isActive && 'bg-elevated ring-1 ring-inset ring-surface-border'
+      )}
+      onClick={onClick}
+    >
+      <span className={cn('flex-1 truncate', isActive ? 'text-brand' : 'text-copy-primary')}>
+        {isActive && (
+          <span className="mr-2 inline-block h-1.5 w-1.5 translate-y-[-1px] rounded-full bg-brand align-middle" />
+        )}
+        {project.name}
+      </span>
 
       {showActions && (
         <div className="relative">

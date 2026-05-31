@@ -4,6 +4,7 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { SignInPage } from './pages/SignInPage'
 import { SignUpPage } from './pages/SignUpPage'
 import { WorkspacePage } from './pages/WorkspacePage'
+import { WorkspaceGuard } from './components/editor/WorkspaceGuard'
 
 function RootRedirect() {
   const { isLoaded, isSignedIn } = useAuth()
@@ -29,7 +30,8 @@ function App() {
       {/* All workspace routes require authentication */}
       <Route element={<ProtectedRoute />}>
         <Route path="/editor" element={<WorkspacePage />} />
-        <Route path="/editor/:projectId" element={<WorkspacePage />} />
+        {/* /editor/:projectId — access verified by WorkspaceGuard */}
+        <Route path="/editor/:projectId" element={<WorkspaceGuard />} />
       </Route>
     </Routes>
   )
