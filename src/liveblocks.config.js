@@ -6,7 +6,7 @@
  *
  *   cursor      {x: number, y: number} | null
  *                 Canvas pointer position; null when cursor leaves the canvas.
- *   isThinking  boolean
+ *   thinking    boolean
  *                 True while the AI copilot is generating a response for
  *                 this user (shows a "thinking" indicator to collaborators).
  *
@@ -24,9 +24,9 @@
  * Initial Presence state for each connected user.
  * Passed as the `initialPresence` prop on every <RoomProvider />.
  *
- * @type {{ cursor: {x: number, y: number} | null, isThinking: boolean }}
+ * @type {{ cursor: {x: number, y: number} | null, thinking: boolean }}
  */
 export const INITIAL_PRESENCE = {
   cursor: null,
-  isThinking: false,
+  thinking: false,
 }

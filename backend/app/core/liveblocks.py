@@ -48,9 +48,8 @@ def _secret_key() -> str:
 async def authorize_user(room_id: str, user_id: str, user_info: dict) -> dict:
     """Create a Liveblocks access token for *user_id* in *room_id*.
 
-    Calls ``POST /v2/rooms/{roomId}/authorize-user``.  Liveblocks creates
-    the room automatically when the first authorization request arrives,
-    so no separate room-creation call is needed.
+    Calls ``POST /v2/authorize-user`` and grants write access to the requested
+    room in the returned access token.
 
     Args:
         room_id:   Liveblocks room identifier (e.g. ``"project-abc123"``).
@@ -67,7 +66,7 @@ async def authorize_user(room_id: str, user_id: str, user_info: dict) -> dict:
     secret = _secret_key()
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.post(
-            f"https://api.liveblocks.io/v2/rooms/{room_id}/authorize-user",
+            "https://api.liveblocks.io/v2/authorize-user",
             headers={
                 "Authorization": f"Bearer {secret}",
                 "Content-Type": "application/json",
@@ -75,6 +74,9 @@ async def authorize_user(room_id: str, user_id: str, user_info: dict) -> dict:
             json={
                 "userId": user_id,
                 "userInfo": user_info,
+                "permissions": {
+                    room_id: ["room:write"],
+                },
             },
         )
         resp.raise_for_status()

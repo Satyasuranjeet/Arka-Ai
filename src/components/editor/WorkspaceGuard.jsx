@@ -55,6 +55,7 @@ export function WorkspaceGuard() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [aiSidebarOpen, setAiSidebarOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+  const [templatesOpen, setTemplatesOpen] = useState(false)
   const actions = useProjectActions()
 
   // ── Render gates ────────────────────────────────────────────────────────
@@ -85,6 +86,7 @@ export function WorkspaceGuard() {
         aiSidebarOpen={aiSidebarOpen}
         onToggleAiSidebar={() => setAiSidebarOpen((prev) => !prev)}
         onShare={() => setShareOpen(true)}
+        onOpenTemplates={() => setTemplatesOpen(true)}
       />
 
       {/* Body row */}
@@ -103,7 +105,11 @@ export function WorkspaceGuard() {
 
         {/* Central canvas — CanvasWrapper owns the RoomProvider + React Flow */}
         <main className="relative flex-1 overflow-hidden bg-base">
-          <CanvasWrapper projectId={projectId} />
+          <CanvasWrapper
+            projectId={projectId}
+            templatesOpen={templatesOpen}
+            onCloseTemplates={() => setTemplatesOpen(false)}
+          />
         </main>
 
         {/* Right AI sidebar — floats over canvas */}
