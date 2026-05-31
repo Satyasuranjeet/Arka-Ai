@@ -1,13 +1,23 @@
 """FastAPI application entry point."""
 
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
 load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.core.database import init_db
+from api.projects import router as projects_router
 
-app = FastAPI(title="Arka AI API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    yield
+
+
+app = FastAPI(title="Arka AI API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -16,6 +26,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(projects_router)
 
 
 # ---------------------------------------------------------------------------

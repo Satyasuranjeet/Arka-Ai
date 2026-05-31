@@ -133,7 +133,7 @@ function ProjectItem({ project, showActions = true, onRename, onDelete }) {
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
-    <li className="group relative flex items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-elevated cursor-pointer">
+    <li className="group relative flex items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-elevated">
       <span className="flex-1 truncate text-copy-primary">{project.name}</span>
 
       {showActions && (

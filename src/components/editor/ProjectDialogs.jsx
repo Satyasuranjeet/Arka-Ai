@@ -51,7 +51,7 @@ export function ProjectDialogs({ dialogs }) {
             </div>
             {formName.trim() && (
               <p className="text-xs text-foreground/60">
-                Slug:{' '}
+                Room ID:{' '}
                 <span className="font-mono text-foreground/80">{slug}</span>
               </p>
             )}

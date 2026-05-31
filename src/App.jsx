@@ -29,6 +29,7 @@ function App() {
       {/* All workspace routes require authentication */}
       <Route element={<ProtectedRoute />}>
         <Route path="/editor" element={<WorkspacePage />} />
+        <Route path="/editor/:projectId" element={<WorkspacePage />} />
       </Route>
     </Routes>
   )
