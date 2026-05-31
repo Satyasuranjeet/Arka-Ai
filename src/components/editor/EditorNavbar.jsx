@@ -1,4 +1,5 @@
 import { PanelLeftOpen, PanelLeftClose } from 'lucide-react'
+import { UserButton } from '@clerk/clerk-react'
 import { Button } from '@/components/ui/button'
 
 export function EditorNavbar({ sidebarOpen, onToggleSidebar }) {
@@ -20,7 +21,9 @@ export function EditorNavbar({ sidebarOpen, onToggleSidebar }) {
       <div className="flex-1" />
 
       {/* Right */}
-      <div className="flex items-center" />
+      <div className="flex items-center">
+        <UserButton />
+      </div>
     </header>
   )
 }
