@@ -52,9 +52,14 @@ export function useProjectActions() {
   async function loadProjects() {
     try {
       setIsLoadingProjects(true)
-      const data = await apiFetch('/api/projects')
-      // Backend only returns owned projects; mark them accordingly
-      setProjects(data.map((p) => ({ ...p, owned: true })))
+      const [owned, shared] = await Promise.all([
+        apiFetch('/api/projects'),
+        apiFetch('/api/projects/shared'),
+      ])
+      setProjects([
+        ...owned.map((p) => ({ ...p, owned: true })),
+        ...shared.map((p) => ({ ...p, owned: false })),
+      ])
     } catch (e) {
       console.error('Failed to load projects:', e)
     } finally {
