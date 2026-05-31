@@ -18,7 +18,7 @@ import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-_bearer_scheme = HTTPBearer()
+_bearer_scheme = HTTPBearer(auto_error=False)
 
 
 @lru_cache(maxsize=1)
@@ -42,6 +42,7 @@ def _verify_token(token: str) -> dict:
             algorithms=["RS256"],
             issuer=issuer,
             options={"verify_aud": False},
+            leeway=60,  # tolerate up to 60 s of clock skew (covers iat/nbf drift)
         )
         return payload
     except jwt.ExpiredSignatureError:
@@ -57,13 +58,19 @@ def _verify_token(token: str) -> dict:
 
 
 async def require_auth(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(_bearer_scheme)],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)],
 ) -> dict:
     """FastAPI dependency that extracts and verifies the Clerk JWT from the
     Authorization header. Returns the decoded JWT payload on success.
 
     Raises HTTP 401 if the token is missing, expired, or invalid.
     """
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authorization header missing",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return _verify_token(credentials.credentials)
 
 

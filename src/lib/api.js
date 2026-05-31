@@ -29,6 +29,7 @@ export function createApiClient(getToken) {
       throw new Error(error.detail ?? `Request failed: ${res.status}`)
     }
 
+    if (res.status === 204) return null
     return res.json()
   }
 
