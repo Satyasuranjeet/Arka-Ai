@@ -15,6 +15,51 @@ import {
   Cylinder,
   Hexagon,
 } from 'lucide-react'
+import { DEFAULT_NODE_COLOR } from '@/constants/canvas'
+
+// ---------------------------------------------------------------------------
+// Drag ghost — builds an offscreen DOM element that matches the dragged shape
+// so the browser can use it as the native drag image. The element is removed
+// after the browser captures it (next animation frame).
+// ---------------------------------------------------------------------------
+
+function buildGhostElement(shape, width, height) {
+  const { fill, text } = DEFAULT_NODE_COLOR
+  const border = `${text}80` // ~50 % opacity border
+
+  const el = document.createElement('div')
+  el.style.cssText = `
+    position: fixed; top: -9999px; left: -9999px;
+    width: ${width}px; height: ${height}px;
+    pointer-events: none; opacity: 0.85; overflow: hidden;
+  `
+
+  if (shape === 'rectangle') {
+    el.style.background = fill
+    el.style.borderRadius = '12px'
+    el.style.border = `1px solid ${border}`
+  } else if (shape === 'circle' || shape === 'pill') {
+    el.style.background = fill
+    el.style.borderRadius = '9999px'
+    el.style.border = `1px solid ${border}`
+  } else {
+    const inner = {
+      diamond: `<polygon points="50,2 98,50 50,98 2,50" fill="${fill}" stroke="${border}" stroke-width="2"/>`,
+      hexagon: `<polygon points="50,2 93,26 93,74 50,98 7,74 7,26" fill="${fill}" stroke="${border}" stroke-width="2"/>`,
+      cylinder: `
+        <rect x="1" y="16" width="98" height="68" fill="${fill}"/>
+        <line x1="1"  y1="16" x2="1"  y2="84" stroke="${border}" stroke-width="1.5"/>
+        <line x1="99" y1="16" x2="99" y2="84" stroke="${border}" stroke-width="1.5"/>
+        <ellipse cx="50" cy="84" rx="49" ry="13" fill="${fill}" stroke="${border}" stroke-width="1.5"/>
+        <ellipse cx="50" cy="16" rx="49" ry="13" fill="${fill}" stroke="${border}" stroke-width="1.5"/>
+      `,
+    }[shape] ?? ''
+    el.innerHTML = `<svg viewBox="0 0 100 100" width="${width}" height="${height}"
+      preserveAspectRatio="none">${inner}</svg>`
+  }
+
+  return el
+}
 
 // ---------------------------------------------------------------------------
 // Shape definitions — name, default canvas dimensions, and toolbar icon.
@@ -42,6 +87,15 @@ function ShapeButton({ shape, width, height, Icon, label }) {
       JSON.stringify({ shape, width, height }),
     )
     event.dataTransfer.effectAllowed = 'copy'
+
+    // Build an offscreen ghost element matching the dragged shape and use it
+    // as the native drag image so the cursor carries a shape preview.
+    // The ghost is appended to the body so the browser can snapshot it, then
+    // removed on the next frame (the browser retains its own copy).
+    const ghost = buildGhostElement(shape, width, height)
+    document.body.appendChild(ghost)
+    event.dataTransfer.setDragImage(ghost, width / 2, height / 2)
+    requestAnimationFrame(() => document.body.removeChild(ghost))
   }
 
   return (

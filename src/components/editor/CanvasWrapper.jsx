@@ -8,35 +8,42 @@
  *   LiveCanvas     → the actual React Flow canvas wired to Liveblocks storage.
  */
 
-import { Component, useRef } from 'react'
-import { RoomProvider, ClientSideSuspense } from '@liveblocks/react'
+import { Component, useRef, createContext, useContext } from 'react'
+import { RoomProvider, ClientSideSuspense, useUndo, useRedo, useCanUndo, useCanRedo, useUpdateMyPresence } from '@liveblocks/react'
 import { useLiveblocksFlow } from '@liveblocks/react-flow'
 import {
   ReactFlow,
+  ReactFlowProvider,
   Background,
   BackgroundVariant,
-  MiniMap,
-  MarkerType,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
 import { INITIAL_PRESENCE } from '@/liveblocks.config'
-import { DEFAULT_NODE_COLOR, canvasNode } from '@/constants/canvas'
+import { DEFAULT_NODE_COLOR, canvasNode, canvasEdge } from '@/constants/canvas'
 import { CanvasNode } from './nodes/CanvasNode'
+import { CanvasEdge } from './edges/CanvasEdge'
 import { ShapePanel } from './ShapePanel'
+import { ControlBar } from './ControlBar'
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import { StarterTemplatesModal } from './StarterTemplatesModal'
+import { PresenceBar } from './PresenceBar'
+import { LiveCursors } from './LiveCursors'
 
-// Register custom node types — must be defined outside the component to keep
-// the reference stable and prevent React Flow from re-mounting nodes on each render.
+// Context to thread templates modal state through Liveblocks' ClientSideSuspense
+const TemplatesContext = createContext({ templatesOpen: false, onCloseTemplates: () => {} })
+
+// Register custom node and edge types — defined outside the component to keep
+// references stable and prevent React Flow from re-mounting on each render.
 const nodeTypes = { [canvasNode]: CanvasNode }
+const edgeTypes = { [canvasEdge]: CanvasEdge }
 
 // ---------------------------------------------------------------------------
 // Live canvas — rendered inside ClientSideSuspense so storage is guaranteed ready
 // ---------------------------------------------------------------------------
 
 const defaultEdgeOptions = {
-  type: 'smoothstep',
-  style: { stroke: '#f8fafc', strokeWidth: 1 },
-  markerEnd: { type: MarkerType.ArrowClosed, color: '#f8fafc' },
+  type: canvasEdge,
 }
 
 function LiveCanvas() {
@@ -53,6 +60,42 @@ function LiveCanvas() {
   const rfInstance = useRef(null)
   // Monotonic counter appended to node IDs to prevent collisions within a session
   const nodeCounter = useRef(0)
+
+  // Liveblocks room history
+  const undo    = useUndo()
+  const redo    = useRedo()
+  const canUndo = useCanUndo()
+  const canRedo = useCanRedo()
+
+  // Global keyboard shortcuts for zoom and history
+  useKeyboardShortcuts(rfInstance, undo, redo)
+
+  // Presence — broadcast cursor position to other collaborators
+  const updateMyPresence = useUpdateMyPresence()
+
+  function handleMouseMove(e) {
+    if (!rfInstance.current) return
+    const pos = rfInstance.current.screenToFlowPosition({ x: e.clientX, y: e.clientY })
+    updateMyPresence({ cursor: pos })
+  }
+
+  function handleMouseLeave() {
+    updateMyPresence({ cursor: null })
+  }
+
+  // Templates modal state from context (threaded through ClientSideSuspense)
+  const { templatesOpen, onCloseTemplates } = useContext(TemplatesContext)
+
+  // Replace the entire canvas with a starter template
+  function handleImportTemplate(template) {
+    const removeNodes = nodes.map((n) => ({ type: 'remove', id: n.id }))
+    const removeEdges = edges.map((e) => ({ type: 'remove', id: e.id }))
+    const addNodes    = template.nodes.map((n) => ({ type: 'add', item: n }))
+    const addEdges    = template.edges.map((e) => ({ type: 'add', item: e }))
+    onNodesChange([...removeNodes, ...addNodes])
+    onEdgesChange([...removeEdges, ...addEdges])
+    setTimeout(() => rfInstance.current?.fitView({ duration: 400, padding: 0.15 }), 120)
+  }
 
   function handleDragOver(event) {
     event.preventDefault()
@@ -97,47 +140,65 @@ function LiveCanvas() {
   }
 
   return (
-    <div className="relative h-full w-full">
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        onDelete={onDelete}
-        onInit={(instance) => { rfInstance.current = instance }}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
-        nodeTypes={nodeTypes}
-        defaultEdgeOptions={defaultEdgeOptions}
-        fitView
-        fitViewOptions={{ padding: 0.2 }}
-        connectOnClick={false}
-        deleteKeyCode={['Backspace', 'Delete']}
-        proOptions={{ hideAttribution: true }}
-      >
-        {/* Dot-pattern background */}
-        <Background
-          variant={BackgroundVariant.Dots}
-          gap={20}
-          size={1}
-          color="#2a2a30"
-        />
+    <div
+      className="relative h-full w-full"
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+    >
+      <ReactFlowProvider>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onDelete={onDelete}
+          onInit={(instance) => { rfInstance.current = instance }}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          defaultEdgeOptions={defaultEdgeOptions}
+          fitView
+          fitViewOptions={{ padding: 0.2 }}
+          connectOnClick={false}
+          deleteKeyCode={['Backspace', 'Delete']}
+          proOptions={{ hideAttribution: true }}
+        >
+          {/* Dot-pattern background */}
+          <Background
+            variant={BackgroundVariant.Dots}
+            gap={20}
+            size={1}
+            color="#2a2a30"
+          />
+        </ReactFlow>
 
-        {/* Mini-map */}
-        <MiniMap
-          nodeColor="#18181c"
-          maskColor="rgba(8,8,9,0.65)"
-          style={{
-            background: '#111114',
-            border: '1px solid #2a2a30',
-            borderRadius: '8px',
-          }}
-        />
-      </ReactFlow>
+        {/* Live cursors sit above ReactFlow so they are not clipped or transformed */}
+        <LiveCursors />
+      </ReactFlowProvider>
 
       {/* Shape panel floats above the canvas, outside the ReactFlow viewport */}
       <ShapePanel />
+
+      {/* Presence avatar bar — top-right corner, shows collaborators + self */}
+      <PresenceBar />
+
+      {/* Control bar — zoom and undo/redo, bottom-left above the shape panel */}
+      <ControlBar
+        rfInstance={rfInstance}
+        undo={undo}
+        redo={redo}
+        canUndo={canUndo}
+        canRedo={canRedo}
+      />
+
+      {/* Starter templates modal — state provided via TemplatesContext */}
+      <StarterTemplatesModal
+        open={templatesOpen}
+        onClose={onCloseTemplates}
+        onImport={handleImportTemplate}
+      />
     </div>
   )
 }
@@ -193,17 +254,19 @@ class CanvasErrorBoundary extends Component {
 // Public wrapper — receives projectId and mounts the full Liveblocks room
 // ---------------------------------------------------------------------------
 
-export function CanvasWrapper({ projectId }) {
+export function CanvasWrapper({ projectId, templatesOpen = false, onCloseTemplates = () => {} }) {
   return (
     <CanvasErrorBoundary>
-      <RoomProvider
-        id={`project-${projectId}`}
-        initialPresence={INITIAL_PRESENCE}
-      >
-        <ClientSideSuspense fallback={<CanvasLoading />}>
-          <LiveCanvas />
-        </ClientSideSuspense>
-      </RoomProvider>
+      <TemplatesContext.Provider value={{ templatesOpen, onCloseTemplates }}>
+        <RoomProvider
+          id={`project-${projectId}`}
+          initialPresence={INITIAL_PRESENCE}
+        >
+          <ClientSideSuspense fallback={<CanvasLoading />}>
+            <LiveCanvas />
+          </ClientSideSuspense>
+        </RoomProvider>
+      </TemplatesContext.Provider>
     </CanvasErrorBoundary>
   )
 }

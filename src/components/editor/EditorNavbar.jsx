@@ -1,4 +1,4 @@
-import { PanelLeftOpen, PanelLeftClose, Share2, BrainCircuit } from 'lucide-react'
+import { PanelLeftOpen, PanelLeftClose, Share2, BrainCircuit, LayoutTemplate } from 'lucide-react'
 import { UserButton } from '@clerk/clerk-react'
 import { Button } from '@/components/ui/button'
 
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
  *   aiSidebarOpen?: boolean,
  *   onToggleAiSidebar?: () => void,
  *   onShare?: () => void,
+ *   onOpenTemplates?: () => void,
  * }} props
  */
 export function EditorNavbar({
@@ -19,6 +20,7 @@ export function EditorNavbar({
   aiSidebarOpen,
   onToggleAiSidebar,
   onShare,
+  onOpenTemplates,
 }) {
   return (
     <header className="fixed top-0 left-0 right-0 z-40 flex h-12 items-center bg-surface border-b border-surface-border px-3 gap-3">
@@ -49,6 +51,15 @@ export function EditorNavbar({
       <div className="flex items-center gap-1">
         {projectName && (
           <>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-xs text-copy-secondary"
+              onClick={onOpenTemplates}
+            >
+              <LayoutTemplate className="h-3.5 w-3.5" />
+              Templates
+            </Button>
             <Button
               variant="ghost"
               size="sm"
