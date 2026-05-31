@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, Navigate } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
-import { Compass, Sparkles, Bot } from 'lucide-react'
+import { Sparkles, Bot } from 'lucide-react'
 import { createApiClient } from '@/lib/api'
 import { AccessDenied } from './AccessDenied'
 import { EditorNavbar } from './EditorNavbar'
@@ -9,6 +9,7 @@ import { ProjectSidebar } from './ProjectSidebar'
 import { ProjectDialogs } from './ProjectDialogs'
 import { ShareDialog } from './ShareDialog'
 import { useProjectActions } from '@/hooks/useProjectActions'
+import { CanvasWrapper } from './CanvasWrapper'
 
 /**
  * Route-level guard for `/editor/:projectId`.
@@ -100,35 +101,14 @@ export function WorkspaceGuard() {
           onDeleteProject={actions.openDelete}
         />
 
-        {/* Central canvas */}
-        <main className="relative flex flex-1 items-center justify-center overflow-hidden bg-base">
-          {/* Ambient glow */}
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="h-[480px] w-[480px] rounded-full bg-brand/5 blur-[100px]" />
-          </div>
-
-          {/* Placeholder content */}
-          <div className="relative flex flex-col items-center gap-5 px-8 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-brand/20 bg-brand/10">
-              <Compass className="h-7 w-7 text-brand" />
-            </div>
-            <p className="text-[10px] font-semibold tracking-[0.25em] text-copy-muted uppercase">
-              Workspace Shell
-            </p>
-            <h2 className="max-w-lg text-4xl font-bold leading-tight text-copy-primary">
-              Canvas and collaboration tooling land here next.
-            </h2>
-            <p className="max-w-md text-sm leading-relaxed text-copy-muted">
-              This room is ready for the shared architecture canvas, durable AI
-              workflows, and real-time presence. For now, the shell is wired with
-              project context and navigation only.
-            </p>
-          </div>
+        {/* Central canvas — CanvasWrapper owns the RoomProvider + React Flow */}
+        <main className="relative flex-1 overflow-hidden bg-base">
+          <CanvasWrapper projectId={projectId} />
         </main>
 
-        {/* Right AI sidebar */}
+        {/* Right AI sidebar — floats over canvas */}
         {aiSidebarOpen && (
-          <aside className="flex w-72 flex-shrink-0 flex-col border-l border-surface-border bg-surface">
+          <aside className="fixed top-14 right-2 bottom-2 z-30 flex w-64 flex-col bg-surface border border-surface-border rounded-xl shadow-2xl shadow-black/30">
             {/* Header */}
             <div className="flex flex-shrink-0 items-start justify-between border-b border-surface-border px-4 py-3">
               <div>

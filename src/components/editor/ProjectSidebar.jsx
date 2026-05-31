@@ -47,8 +47,8 @@ export function ProjectSidebar({
 
       <div
         className={cn(
-          'fixed top-12 left-0 bottom-0 z-30 w-72 flex flex-col bg-surface border-r border-surface-border transition-transform duration-200 ease-in-out',
-          isOpen ? 'translate-x-0' : '-translate-x-full'
+          'fixed top-14 left-2 bottom-2 z-30 w-64 flex flex-col bg-surface border border-surface-border rounded-xl shadow-2xl shadow-black/30 transition-transform duration-200 ease-in-out',
+          isOpen ? 'translate-x-0' : '-translate-x-[calc(100%+0.5rem)]'
         )}
       >
         {/* Header */}
