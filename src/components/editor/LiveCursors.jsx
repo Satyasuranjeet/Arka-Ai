@@ -11,6 +11,7 @@
 
 import { useOthers, useSelf } from '@liveblocks/react'
 import { useViewport } from '@xyflow/react'
+import { Loader2 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // SVG cursor pointer icon
@@ -65,6 +66,7 @@ export function LiveCursors() {
         const screenY  = y * zoom + vpY
         const color    = user.info?.color ?? '#808090'
         const name     = user.info?.name  ?? 'Anonymous'
+        const thinking = user.presence.thinking === true
 
         return (
           <div
@@ -82,8 +84,9 @@ export function LiveCursors() {
             {/* Name badge — offset slightly to the right of the pointer tip */}
             <div
               style={{ background: color, marginLeft: 10, marginTop: 1 }}
-              className="inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white whitespace-nowrap shadow-sm"
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white whitespace-nowrap shadow-sm"
             >
+              {thinking && <Loader2 className="h-2.5 w-2.5 animate-spin" />}
               {name}
             </div>
           </div>

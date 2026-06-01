@@ -1,14 +1,20 @@
+import os
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Any
 
+import httpx
 from beanie import PydanticObjectId
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
 from app.models.project import Project, ProjectCollaborator, ProjectStatus
+from app.models.project_spec import ProjectSpec
 from app.services.project_access import verify_project_access
 from app.services.clerk_service import get_user_by_email, get_user_email_by_id
+from app.services.trigger_service import trigger_task, get_run
 from middleware.clerk_auth import CurrentUser
+from fastapi.responses import StreamingResponse
+from bson import ObjectId
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -23,7 +29,6 @@ class ProjectOut(BaseModel):
     name: str
     description: Optional[str] = None
     status: ProjectStatus
-    canvas_json_path: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -35,7 +40,6 @@ class ProjectOut(BaseModel):
             name=doc.name,
             description=doc.description,
             status=doc.status,
-            canvas_json_path=doc.canvas_json_path,
             created_at=doc.created_at,
             updated_at=doc.updated_at,
         )
@@ -51,6 +55,11 @@ class CreateProjectBody(BaseModel):
 
 class RenameProjectBody(BaseModel):
     name: str
+
+
+class CanvasSaveBody(BaseModel):
+    nodes: list[Any] = []
+    edges: list[Any] = []
 
 
 class InviteCollaboratorBody(BaseModel):
@@ -282,3 +291,203 @@ async def delete_project(project_id: str, user: CurrentUser):
         )
 
     await project.delete()
+
+
+# ---------------------------------------------------------------------------
+# Canvas save / load routes
+# NOTE: declared after /{project_id} PATCH/DELETE to avoid path conflicts.
+# Canvas JSON is stored directly on the Project document in MongoDB —
+# no blob storage involved, so no "advanced operation" quota is consumed.
+# ---------------------------------------------------------------------------
+
+
+@router.put("/{project_id}/canvas", status_code=status.HTTP_200_OK)
+async def save_canvas(project_id: str, body: CanvasSaveBody, user: CurrentUser):
+    """
+    Persist the canvas JSON (nodes + edges) on the Project document in MongoDB.
+    Write access is required (owner or collaborator).
+    """
+    user_id = user["sub"]
+    user_email = user.get("email", "")
+    await verify_project_access(project_id, user_id, user_email)
+
+    project = await _get_project_or_404(project_id)
+    project.canvas_data = {"nodes": body.nodes, "edges": body.edges}
+    project.updated_at = datetime.now(timezone.utc)
+    await project.save()
+
+    return {"ok": True}
+
+
+@router.get("/{project_id}/canvas")
+async def load_canvas(project_id: str, user: CurrentUser):
+    """
+    Return the saved canvas JSON for a project.
+    Read access is required (owner or collaborator).
+    """
+    user_id = user["sub"]
+    user_email = user.get("email", "")
+    await verify_project_access(project_id, user_id, user_email)
+
+    project = await _get_project_or_404(project_id)
+
+    # canvas_data is the new primary storage path
+    if project.canvas_data:
+        return {
+            "nodes": project.canvas_data.get("nodes", []),
+            "edges": project.canvas_data.get("edges", []),
+        }
+
+    # Fallback: migrate data from legacy Vercel Blob URL if it exists
+    if project.canvas_blob_url:
+        try:
+            token = os.environ.get("BLOB_READ_WRITE_TOKEN", "") or os.environ.get("VERCEL_BLOB_TOKEN", "")
+            if token:
+                async with httpx.AsyncClient() as client:
+                    resp = await client.get(
+                        project.canvas_blob_url,
+                        headers={"authorization": f"Bearer {token}"},
+                    )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    canvas = {"nodes": data.get("nodes", []), "edges": data.get("edges", [])}
+                    # Migrate to MongoDB so we don't hit blob again
+                    project.canvas_data = canvas
+                    project.canvas_blob_url = None
+                    await project.save()
+                    return canvas
+        except Exception:
+            pass
+
+    return {"nodes": [], "edges": []}
+
+
+# ---------------------------------------------------------------------------
+# Specs persistence and download
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{project_id}/specs")
+async def list_specs(project_id: str, user: CurrentUser):
+    """Return metadata for all specs belonging to a project.
+
+    Access is verified — only owners or collaborators may list specs.
+    """
+    user_id = user["sub"]
+    user_email = user.get("email", "")
+    await verify_project_access(project_id, user_id, user_email)
+
+    specs = (
+        await ProjectSpec.find(ProjectSpec.project_id == project_id)
+        .sort(-ProjectSpec.created_at)
+        .to_list()
+    )
+
+    return [
+        {
+            "specId": str(spec.id),
+            "created_at": spec.created_at.isoformat(),
+            "filename": f"spec-{spec.created_at.strftime('%Y-%m-%d-%H%M%S')}.md",
+        }
+        for spec in specs
+    ]
+
+
+@router.get("/{project_id}/specs/{spec_id}/download")
+async def download_spec(project_id: str, spec_id: str, user: CurrentUser):
+    """
+    Download a generated spec Markdown file as an attachment.
+
+    Access is verified via `verify_project_access` — only owners or collaborators
+    may download specs for the project.
+    """
+    user_id = user["sub"]
+    user_email = user.get("email", "")
+    await verify_project_access(project_id, user_id, user_email)
+
+    # Validate spec_id as an ObjectId where applicable, otherwise fall back to string lookup
+    spec = None
+    try:
+        oid = ObjectId(spec_id)
+        spec = await ProjectSpec.get(oid)
+    except Exception:
+        # try as string id field
+        spec = await ProjectSpec.find_one(ProjectSpec.id == spec_id)
+
+    if spec is None or spec.project_id != project_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Spec not found")
+
+    # Stream the markdown content as a downloadable attachment
+    content_bytes = spec.content.encode("utf-8")
+    headers = {"Content-Disposition": "attachment; filename=spec.md"}
+    return StreamingResponse(iter([content_bytes]), media_type="text/markdown", headers=headers)
+
+
+class CreateSpecBody(BaseModel):
+    content: str
+
+
+@router.post("/{project_id}/specs", status_code=status.HTTP_201_CREATED)
+async def create_spec(project_id: str, body: CreateSpecBody, user: CurrentUser):
+    """Create and persist a generated spec for the given project.
+
+    This endpoint requires the requester to have write access to the project
+    (owner or collaborator). Returns the created spec id.
+    """
+    user_id = user["sub"]
+    user_email = user.get("email", "")
+    await verify_project_access(project_id, user_id, user_email)
+
+    spec = ProjectSpec(project_id=project_id, content=body.content)
+    await spec.insert()
+    return {"specId": str(spec.id)}
+
+
+# ---------------------------------------------------------------------------
+# Trigger.dev — background AI tasks
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{project_id}/canvas/analyze", status_code=status.HTTP_202_ACCEPTED)
+async def trigger_canvas_analysis(project_id: str, user: CurrentUser):
+    """
+    Queue an AI analysis of the current canvas in the background via Trigger.dev.
+
+    Returns immediately with a run ID.  Poll ``GET /api/projects/{id}/runs/{run_id}``
+    to check progress and retrieve the result when status is ``COMPLETED``.
+    """
+    user_id = user["sub"]
+    user_email = user.get("email", "")
+    await verify_project_access(project_id, user_id, user_email)
+
+    project = await _get_project_or_404(project_id)
+    canvas = project.canvas_data or {"nodes": [], "edges": []}
+
+    run = await trigger_task(
+        task_id="analyze-canvas",
+        payload={
+            "projectId": project_id,
+            "projectName": project.name,
+            "nodes": canvas.get("nodes", []),
+            "edges": canvas.get("edges", []),
+        },
+    )
+
+    return {"runId": run.get("id"), "status": run.get("status", "QUEUED")}
+
+
+@router.get("/{project_id}/runs/{run_id}")
+async def get_task_run(project_id: str, run_id: str, user: CurrentUser):
+    """
+    Poll the status of a Trigger.dev run.
+
+    Returns the run object including ``status`` and ``output`` when complete.
+    Possible statuses: QUEUED, EXECUTING, COMPLETED, FAILED, CANCELLED.
+    """
+    user_id = user["sub"]
+    user_email = user.get("email", "")
+    # Verify the user still has access to this project before exposing run data
+    await verify_project_access(project_id, user_id, user_email)
+
+    run = await get_run(run_id)
+    return run

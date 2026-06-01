@@ -11,6 +11,8 @@ from pymongo.server_api import ServerApi
 from beanie import init_beanie
 
 from app.models.project import Project, ProjectCollaborator
+from app.models.task_run import TaskRun
+from app.models.project_spec import ProjectSpec
 
 _client: AsyncIOMotorClient | None = None
 
@@ -34,5 +36,5 @@ async def init_db() -> None:
     db_name = os.environ.get("MONGODB_DB", "mydb")
     await init_beanie(
         database=client[db_name],
-        document_models=[Project, ProjectCollaborator],
+        document_models=[Project, ProjectCollaborator, TaskRun, ProjectSpec],
     )
