@@ -10,12 +10,12 @@
  * Disabled buttons are visually dimmed and non-interactive.
  */
 
-import { ZoomIn, ZoomOut, Maximize2, Undo2, Redo2 } from 'lucide-react'
+import { ZoomIn, ZoomOut, Maximize2, Undo2, Redo2, MousePointer2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const ANIM = { duration: 200 }
 
-export function ControlBar({ rfInstance, undo, redo, canUndo, canRedo }) {
+export function ControlBar({ rfInstance, undo, redo, canUndo, canRedo, selectMode = false, onToggleSelectMode }) {
   return (
     <div className="nodrag nopan pointer-events-auto absolute bottom-6 left-4 z-10">
       <div className="flex items-center rounded-full border border-surface-border bg-surface px-1 py-1 shadow-lg shadow-black/30">
@@ -40,12 +40,26 @@ export function ControlBar({ rfInstance, undo, redo, canUndo, canRedo }) {
         <CtrlBtn onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)">
           <Redo2 size={16} />
         </CtrlBtn>
+
+        {/* Divider */}
+        <div className="mx-2 h-5 w-px bg-surface-border" aria-hidden />
+
+        {/* Mode group */}
+        <CtrlBtn
+          onClick={onToggleSelectMode}
+          active={selectMode}
+          title={selectMode
+            ? 'Selection mode — drag to select nodes (click to switch to Pan mode)'
+            : 'Pan mode — hold Shift+drag to select nodes (click to switch to Selection mode)'}
+        >
+          <MousePointer2 size={16} />
+        </CtrlBtn>
       </div>
     </div>
   )
 }
 
-function CtrlBtn({ onClick, disabled = false, title, children }) {
+function CtrlBtn({ onClick, disabled = false, title, active = false, children }) {
   return (
     <button
       type="button"
@@ -53,10 +67,12 @@ function CtrlBtn({ onClick, disabled = false, title, children }) {
       disabled={disabled}
       title={title}
       className={cn(
-        'flex h-8 w-8 items-center justify-center rounded-full text-copy-secondary transition-colors',
+        'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
         disabled
-          ? 'cursor-not-allowed opacity-30'
-          : 'cursor-pointer hover:bg-elevated hover:text-copy-primary',
+          ? 'cursor-not-allowed opacity-30 text-copy-secondary'
+          : active
+          ? 'bg-elevated text-copy-primary cursor-pointer'
+          : 'cursor-pointer text-copy-secondary hover:bg-elevated hover:text-copy-primary',
       )}
     >
       {children}

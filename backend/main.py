@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import init_db
 from api.projects import router as projects_router
 from api.liveblocks_auth import router as liveblocks_router
+from api.ai import router as ai_router
 
 
 @asynccontextmanager
@@ -22,17 +23,15 @@ app = FastAPI(title="Arka AI API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5174",  # Vite dev server (fallback port)
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.include_router(projects_router)
 app.include_router(liveblocks_router)
+app.include_router(ai_router)
 
 
 # ---------------------------------------------------------------------------

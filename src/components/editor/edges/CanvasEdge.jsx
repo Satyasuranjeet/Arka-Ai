@@ -144,11 +144,11 @@ export function CanvasEdge({
             </span>
           ) : (
             <span
-              className="rounded-full text-xs text-copy-faint px-1.5 py-0.5 select-none cursor-pointer"
-              style={{ opacity: 0.25 }}
-              title="Double-click to add label"
+              className="rounded-full border border-surface-border bg-surface text-xs text-copy-muted px-2 py-0.5 select-none cursor-pointer transition-opacity"
+              style={{ opacity: isActive ? 0.65 : 0 }}
+              title="Double-click to add a label"
             >
-              +
+              + label
             </span>
           )}
         </div>

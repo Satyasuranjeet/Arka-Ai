@@ -17,7 +17,8 @@ class Project(Document):
     name: str
     description: Optional[str] = None
     status: ProjectStatus = ProjectStatus.DRAFT
-    canvas_json_path: Optional[str] = None
+    canvas_blob_url: Optional[str] = None  # kept for migration; new saves use canvas_data
+    canvas_data: Optional[dict] = None     # nodes + edges stored directly in MongoDB
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )

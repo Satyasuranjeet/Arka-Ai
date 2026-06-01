@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useParams, Navigate } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
-import { Sparkles, Bot } from 'lucide-react'
+import { RoomProvider } from '@liveblocks/react'
 import { createApiClient } from '@/lib/api'
+import { INITIAL_PRESENCE } from '@/liveblocks.config'
 import { AccessDenied } from './AccessDenied'
 import { EditorNavbar } from './EditorNavbar'
 import { ProjectSidebar } from './ProjectSidebar'
@@ -10,6 +11,7 @@ import { ProjectDialogs } from './ProjectDialogs'
 import { ShareDialog } from './ShareDialog'
 import { useProjectActions } from '@/hooks/useProjectActions'
 import { CanvasWrapper } from './CanvasWrapper'
+import { AiSidebar } from './AiSidebar'
 
 /**
  * Route-level guard for `/editor/:projectId`.
@@ -56,6 +58,10 @@ export function WorkspaceGuard() {
   const [aiSidebarOpen, setAiSidebarOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const [templatesOpen, setTemplatesOpen] = useState(false)
+  const [saveStatus, setSaveStatus] = useState('idle')
+  const saveTriggerRef = useRef(null)
+  const handleSaveTriggerReady = useCallback((fn) => { saveTriggerRef.current = fn }, [])
+  const handleCloseTemplates = useCallback(() => setTemplatesOpen(false), [])
   const actions = useProjectActions()
 
   // ── Render gates ────────────────────────────────────────────────────────
@@ -85,11 +91,17 @@ export function WorkspaceGuard() {
         projectName={project.name}
         aiSidebarOpen={aiSidebarOpen}
         onToggleAiSidebar={() => setAiSidebarOpen((prev) => !prev)}
+        saveStatus={saveStatus}
         onShare={() => setShareOpen(true)}
         onOpenTemplates={() => setTemplatesOpen(true)}
+        onManualSave={() => saveTriggerRef.current?.()}
       />
 
       {/* Body row */}
+      <RoomProvider
+        id={`project-${projectId}`}
+        initialPresence={INITIAL_PRESENCE}
+      >
       <div className="flex flex-1 overflow-hidden pt-12">
 
         {/* Left sidebar */}
@@ -108,54 +120,21 @@ export function WorkspaceGuard() {
           <CanvasWrapper
             projectId={projectId}
             templatesOpen={templatesOpen}
-            onCloseTemplates={() => setTemplatesOpen(false)}
+            onCloseTemplates={handleCloseTemplates}
+            onSaveStatusChange={setSaveStatus}
+            onSaveTriggerReady={handleSaveTriggerReady}
           />
         </main>
 
         {/* Right AI sidebar — floats over canvas */}
         {aiSidebarOpen && (
-          <aside className="fixed top-14 right-2 bottom-2 z-30 flex w-64 flex-col bg-surface border border-surface-border rounded-xl shadow-2xl shadow-black/30">
-            {/* Header */}
-            <div className="flex flex-shrink-0 items-start justify-between border-b border-surface-border px-4 py-3">
-              <div>
-                <p className="text-sm font-semibold text-copy-primary">AI Copilot</p>
-                <p className="text-[11px] text-copy-muted">Placeholder panel</p>
-              </div>
-              <Sparkles className="mt-0.5 h-4 w-4 text-[#8b82ff]" />
-            </div>
-
-            {/* Cards */}
-            <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-3">
-              <div className="rounded-2xl border border-surface-border bg-elevated p-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-[rgba(100,87,249,0.15)]">
-                    <Bot className="h-4 w-4 text-[#8b82ff]" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-copy-primary">
-                      Chat surface pending
-                    </p>
-                    <p className="mt-1 text-[11px] leading-relaxed text-copy-muted">
-                      The toggle is wired. Messaging and generation are
-                      intentionally out of scope here.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-surface-border bg-elevated p-4">
-                <p className="mb-2 text-[10px] font-semibold tracking-[0.18em] text-copy-faint uppercase">
-                  Future Hooks
-                </p>
-                <p className="text-[11px] leading-relaxed text-copy-muted">
-                  Prompt composer, run status, and architecture guidance will
-                  attach to this sidebar.
-                </p>
-              </div>
-            </div>
-          </aside>
+          <AiSidebar
+            projectId={projectId}
+            onClose={() => setAiSidebarOpen(false)}
+          />
         )}
       </div>
+      </RoomProvider>
 
       {/* Dialogs */}
       <ProjectDialogs dialogs={actions} />

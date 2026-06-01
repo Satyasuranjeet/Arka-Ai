@@ -1,7 +1,7 @@
 import { useAuth } from '@clerk/clerk-react'
 import { LiveblocksProvider } from '@liveblocks/react'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? ''
 
 export function AuthenticatedLiveblocksProvider({ children }) {
   const { getToken } = useAuth()

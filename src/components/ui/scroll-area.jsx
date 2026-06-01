@@ -34,13 +34,13 @@ function ScrollBar({
       data-orientation={orientation}
       orientation={orientation}
       className={cn(
-        "flex touch-none p-px transition-colors select-none data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-vertical:h-full data-vertical:w-2.5 data-vertical:border-l data-vertical:border-l-transparent",
+        "flex touch-none select-none p-[2px] transition-colors data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-horizontal:bg-transparent data-vertical:h-full data-vertical:w-3 data-vertical:border-l data-vertical:border-l-transparent data-vertical:bg-transparent",
         className
       )}
       {...props}>
       <ScrollAreaPrimitive.Thumb
         data-slot="scroll-area-thumb"
-        className="relative flex-1 rounded-full bg-border" />
+        className="relative flex-1 rounded-full bg-surface-border/80 shadow-[0_0_0_1px_rgba(255,255,255,0.04)] transition-colors hover:bg-ai/45 data-[orientation=vertical]:min-h-10 data-[orientation=horizontal]:min-w-10" />
     </ScrollAreaPrimitive.Scrollbar>
   );
 }

@@ -8,8 +8,9 @@
  *   LiveCanvas     → the actual React Flow canvas wired to Liveblocks storage.
  */
 
-import { Component, useRef, createContext, useContext } from 'react'
-import { RoomProvider, ClientSideSuspense, useUndo, useRedo, useCanUndo, useCanRedo, useUpdateMyPresence } from '@liveblocks/react'
+import { Component, useState, useRef, useEffect, createContext, useContext, useMemo } from 'react'
+import { useAuth } from '@clerk/clerk-react'
+import { useUndo, useRedo, useCanUndo, useCanRedo, useUpdateMyPresence } from '@liveblocks/react'
 import { useLiveblocksFlow } from '@liveblocks/react-flow'
 import {
   ReactFlow,
@@ -19,19 +20,26 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
-import { INITIAL_PRESENCE } from '@/liveblocks.config'
 import { DEFAULT_NODE_COLOR, canvasNode, canvasEdge } from '@/constants/canvas'
 import { CanvasNode } from './nodes/CanvasNode'
 import { CanvasEdge } from './edges/CanvasEdge'
 import { ShapePanel } from './ShapePanel'
 import { ControlBar } from './ControlBar'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import { useAutosave } from '@/hooks/useAutosave'
+import { createApiClient } from '@/lib/api'
 import { StarterTemplatesModal } from './StarterTemplatesModal'
 import { PresenceBar } from './PresenceBar'
 import { LiveCursors } from './LiveCursors'
 
-// Context to thread templates modal state through Liveblocks' ClientSideSuspense
-const TemplatesContext = createContext({ templatesOpen: false, onCloseTemplates: () => {} })
+// Context to thread modal/save state through Liveblocks' ClientSideSuspense
+const TemplatesContext = createContext({
+  templatesOpen: false,
+  onCloseTemplates: () => {},
+  projectId: null,
+  onSaveStatusChange: () => {},
+  onSaveTriggerReady: () => {},
+})
 
 // Register custom node and edge types — defined outside the component to keep
 // references stable and prevent React Flow from re-mounting on each render.
@@ -46,15 +54,30 @@ const defaultEdgeOptions = {
   type: canvasEdge,
 }
 
+const EMPTY_FLOW_ITEMS = []
+
 function LiveCanvas() {
+  // useLiveblocksFlow without suspense: true never throws a Promise, so
+  // ClientSideSuspense (and the ReactFlowProvider it wraps) never unmounts.
   const {
-    nodes,
-    edges,
+    nodes: liveNodes,
+    edges: liveEdges,
+    isLoading: isFlowLoading,
     onNodesChange,
     onEdgesChange,
     onConnect,
     onDelete,
-  } = useLiveblocksFlow({ suspense: true })
+  } = useLiveblocksFlow({
+    nodes: { initial: [] },
+    edges: { initial: [] },
+  })
+  const isFlowReady = !isFlowLoading && Array.isArray(liveNodes) && Array.isArray(liveEdges)
+  const nodes = Array.isArray(liveNodes) ? liveNodes : EMPTY_FLOW_ITEMS
+  const edges = Array.isArray(liveEdges) ? liveEdges : EMPTY_FLOW_ITEMS
+  const [stableFlow, setStableFlow] = useState({ nodes: [], edges: [] })
+  const [hasRenderedFlow, setHasRenderedFlow] = useState(false)
+  const visibleNodes = isFlowReady ? nodes : stableFlow.nodes
+  const visibleEdges = isFlowReady ? edges : stableFlow.edges
 
   // React Flow instance — stored in a ref so drop handler can call screenToFlowPosition
   const rfInstance = useRef(null)
@@ -70,8 +93,61 @@ function LiveCanvas() {
   // Global keyboard shortcuts for zoom and history
   useKeyboardShortcuts(rfInstance, undo, redo)
 
+  // Selection mode — when true, left-drag on empty canvas draws a selection box;
+  // panning requires middle or right mouse button instead of left.
+  const [selectMode, setSelectMode] = useState(false)
+
   // Presence — broadcast cursor position to other collaborators
   const updateMyPresence = useUpdateMyPresence()
+  // Canvas context — projectId and save-status callback from CanvasWrapper
+  const { templatesOpen, onCloseTemplates, projectId, onSaveStatusChange, onSaveTriggerReady } = useContext(TemplatesContext)
+
+  // Manual save — only fires when triggerSave() is explicitly called
+  const { saveStatus, triggerSave } = useAutosave({ nodes: visibleNodes, edges: visibleEdges, projectId })
+  useEffect(() => { onSaveStatusChange(saveStatus) }, [saveStatus, onSaveStatusChange])
+  // Register the manual-save trigger with the parent so EditorNavbar can call it
+  useEffect(() => { onSaveTriggerReady(triggerSave) }, [triggerSave, onSaveTriggerReady])
+
+  // Canvas load — on first mount, if the room is empty, hydrate from the saved blob
+  const { getToken } = useAuth()
+  const hasLoadedRef = useRef(false)
+  useEffect(() => {
+    if (hasLoadedRef.current || !projectId || !isFlowReady) return
+    hasLoadedRef.current = true
+    // If the room already has live data from a collaborator, skip the backend load.
+    if (nodes.length > 0 || edges.length > 0) return
+    ;(async () => {
+      try {
+        const { apiFetch } = createApiClient(getToken)
+        const data = await apiFetch(`/api/projects/${projectId}/canvas`)
+        const savedNodes = Array.isArray(data.nodes) ? data.nodes : []
+        const savedEdges = Array.isArray(data.edges) ? data.edges : []
+        if (savedNodes.length > 0 || savedEdges.length > 0) {
+          onNodesChange(savedNodes.map((n) => ({ type: 'add', item: n })))
+          onEdgesChange(savedEdges.map((e) => ({ type: 'add', item: e })))
+          setTimeout(() => rfInstance.current?.fitView({ duration: 400, padding: 0.15 }), 120)
+        }
+      } catch {
+        // Silently ignore load failures — canvas stays empty
+      }
+    })()
+  }, [projectId, isFlowReady, nodes.length, edges.length, getToken, onNodesChange, onEdgesChange])
+
+  useEffect(() => {
+    if (!isFlowReady || hasRenderedFlow) return
+    const id = setTimeout(() => {
+      setHasRenderedFlow(true)
+    }, 0)
+    return () => clearTimeout(id)
+  }, [isFlowReady, hasRenderedFlow])
+
+  useEffect(() => {
+    if (!isFlowReady) return
+    const id = setTimeout(() => {
+      setStableFlow({ nodes, edges })
+    }, 0)
+    return () => clearTimeout(id)
+  }, [isFlowReady, nodes, edges])
 
   function handleMouseMove(e) {
     if (!rfInstance.current) return
@@ -83,13 +159,10 @@ function LiveCanvas() {
     updateMyPresence({ cursor: null })
   }
 
-  // Templates modal state from context (threaded through ClientSideSuspense)
-  const { templatesOpen, onCloseTemplates } = useContext(TemplatesContext)
-
   // Replace the entire canvas with a starter template
   function handleImportTemplate(template) {
-    const removeNodes = nodes.map((n) => ({ type: 'remove', id: n.id }))
-    const removeEdges = edges.map((e) => ({ type: 'remove', id: e.id }))
+    const removeNodes = visibleNodes.map((n) => ({ type: 'remove', id: n.id }))
+    const removeEdges = visibleEdges.map((e) => ({ type: 'remove', id: e.id }))
     const addNodes    = template.nodes.map((n) => ({ type: 'add', item: n }))
     const addEdges    = template.edges.map((e) => ({ type: 'add', item: e }))
     onNodesChange([...removeNodes, ...addNodes])
@@ -139,6 +212,12 @@ function LiveCanvas() {
     onNodesChange([{ type: 'add', item: newNode }])
   }
 
+  // Show the spinner only for the initial Liveblocks storage setup.
+  // After first render, keep React Flow mounted through AI join/leave sync blips.
+  if (!hasRenderedFlow && !isFlowReady) {
+    return <CanvasLoading />
+  }
+
   return (
     <div
       className="relative h-full w-full"
@@ -147,8 +226,8 @@ function LiveCanvas() {
     >
       <ReactFlowProvider>
         <ReactFlow
-          nodes={nodes}
-          edges={edges}
+          nodes={visibleNodes}
+          edges={visibleEdges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
@@ -159,10 +238,11 @@ function LiveCanvas() {
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           defaultEdgeOptions={defaultEdgeOptions}
-          fitView
-          fitViewOptions={{ padding: 0.2 }}
           connectOnClick={false}
           deleteKeyCode={['Backspace', 'Delete']}
+          selectionOnDrag={selectMode}
+          panOnDrag={selectMode ? [1, 2] : true}
+          multiSelectionKeyCode={['Meta', 'Shift']}
           proOptions={{ hideAttribution: true }}
         >
           {/* Dot-pattern background */}
@@ -191,6 +271,8 @@ function LiveCanvas() {
         redo={redo}
         canUndo={canUndo}
         canRedo={canRedo}
+        selectMode={selectMode}
+        onToggleSelectMode={() => setSelectMode((v) => !v)}
       />
 
       {/* Starter templates modal — state provided via TemplatesContext */}
@@ -254,18 +336,23 @@ class CanvasErrorBoundary extends Component {
 // Public wrapper — receives projectId and mounts the full Liveblocks room
 // ---------------------------------------------------------------------------
 
-export function CanvasWrapper({ projectId, templatesOpen = false, onCloseTemplates = () => {} }) {
+export function CanvasWrapper({
+  projectId,
+  templatesOpen = false,
+  onCloseTemplates = () => {},
+  onSaveStatusChange = () => {},
+  onSaveTriggerReady = () => {},
+}) {
+  // Memoize context value so LiveCanvas only re-renders when these values
+  // actually change, not on every WorkspaceGuard parent render.
+  const contextValue = useMemo(
+    () => ({ templatesOpen, onCloseTemplates, projectId, onSaveStatusChange, onSaveTriggerReady }),
+    [templatesOpen, onCloseTemplates, projectId, onSaveStatusChange, onSaveTriggerReady],
+  )
   return (
     <CanvasErrorBoundary>
-      <TemplatesContext.Provider value={{ templatesOpen, onCloseTemplates }}>
-        <RoomProvider
-          id={`project-${projectId}`}
-          initialPresence={INITIAL_PRESENCE}
-        >
-          <ClientSideSuspense fallback={<CanvasLoading />}>
-            <LiveCanvas />
-          </ClientSideSuspense>
-        </RoomProvider>
+      <TemplatesContext.Provider value={contextValue}>
+        <LiveCanvas />
       </TemplatesContext.Provider>
     </CanvasErrorBoundary>
   )
